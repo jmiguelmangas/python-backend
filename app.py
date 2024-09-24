@@ -12,31 +12,60 @@ SECRET_KEY = os.getenv('SECRET_KEY')
 app.config['JWT_SECRET_KEY'] = SECRET_KEY  # Cambia esto por una clave secreta más segura
 jwt = JWTManager(app)
 
-users = {}
+# Configuración de SQLite
+basedir = os.path.abspath(os.path.dirname(__file__))
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join(basedir, 'db.sqlite')
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+# Inicializar la base de datos y Marshmallow
+db = SQLAlchemy(app)
+ma = Marshmallow(app)
+
+@jwt.additional_claims_loader
+def add_claims_to_access_token(identity):
+    user = User.query.get(identity)
+    return {'role': user.role}
+
+
+class User(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(80), unique=True, nullable=False)
+    password = db.Column(db.String(120), nullable=False)
+    role = db.Column(db.String(20), nullable=False, default='user')  # Agregamos el rol
+
 
 @app.route('/register', methods=['POST'])
 def register():
-    data = request.get_json()
-    username = data.get('username')
-    password = data.get('password')
+    username = request.json.get('username')
+    password = request.json.get('password')
+    role = request.json.get('role', 'user')  # Por defecto, el rol es 'user'
     
-    if username in users:
-        return jsonify({'msg': 'Usuario ya existe'}), 400
-    
-    users[username] = password
-    return jsonify({'msg': 'Usuario creado exitosamente'}), 201
+    new_user = User(username=username, password=password, role=role)
+    db.session.add(new_user)
+    db.session.commit()
+    return jsonify({"message": "User created successfully"}), 201
+
 
 @app.route('/login', methods=['POST'])
 def login():
-    data = request.get_json()
-    username = data.get('username')
-    password = data.get('password')
+    username = request.json.get('username')
+    password = request.json.get('password')
 
-    if users.get(username) != password:
-        return jsonify({'msg': 'Credenciales inválidas'}), 401
-    
-    access_token = create_access_token(identity=username)
-    return jsonify(access_token=access_token), 200
+    # Busca el usuario en la base de datos
+    user = User.query.filter_by(username=username).first()
+
+    # Verifica si el usuario existe y si la contraseña es correcta
+    if user and user.password == password:  # Recuerda que deberías usar hashing para contraseñas en producción
+        access_token = create_access_token(identity=user.id)  # Usa el ID del usuario
+        return jsonify(access_token=access_token), 200
+    else:
+        return jsonify({"error": "Invalid credentials"}), 401
+
+@app.route('/protected', methods=['GET'])
+@jwt_required()  # Este decorador asegura que solo los usuarios autenticados puedan acceder
+def protected():
+    current_user = get_jwt_identity()  # Obtiene la identidad del usuario desde el token
+    return jsonify(logged_in_as=current_user), 200
 
 # Manejo de errores para el método POST
 @app.errorhandler(400)
@@ -53,14 +82,7 @@ def not_found(error):
 def handle_exception(e):
     return jsonify({'error': 'Internal Server Error', 'message': str(e)}), 500
 
-# Configuración de SQLite
-basedir = os.path.abspath(os.path.dirname(__file__))
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join(basedir, 'db.sqlite')
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-# Inicializar la base de datos y Marshmallow
-db = SQLAlchemy(app)
-ma = Marshmallow(app)
 
 # Definir el modelo de Tarea
 class Task(db.Model):
