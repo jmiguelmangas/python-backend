@@ -20,23 +20,23 @@ Una aplicación simple para gestionar tareas utilizando Flask y SQLite.
    git clone https://github.com/jmiguelmangas/python-backend.git
 
 2. Navega al directorio del proyecto:
-
+    ```bash
     cd python-backend
 
 3. Crea y activa un entorno virtual:
-
+    ```bash
     python -m venv venv
 
     source venv/bin/activate  
-    # En Windows usa `venv\Scripts\activate`
+    En Windows usa `venv\Scripts\activate`
 
 4. Instala las dependencias:
-
+    ```bash
     pip install -r requirements.txt
 
 ## Uso
 Ejecuta la aplicación:
-
+    ```bash
     python app.py
 
 Accede a la API en http://127.0.0.1:5000/tasks
