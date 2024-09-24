@@ -2,10 +2,41 @@ from flask import Flask, request, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from flask_marshmallow import Marshmallow
 import os
+from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
+
 
 
 
 app = Flask(__name__)
+
+app.config['JWT_SECRET_KEY'] = 'jwtmadriz'  # Cambia esto por una clave secreta más segura
+jwt = JWTManager(app)
+
+users = {}
+
+@app.route('/register', methods=['POST'])
+def register():
+    data = request.get_json()
+    username = data.get('username')
+    password = data.get('password')
+    
+    if username in users:
+        return jsonify({'msg': 'Usuario ya existe'}), 400
+    
+    users[username] = password
+    return jsonify({'msg': 'Usuario creado exitosamente'}), 201
+
+@app.route('/login', methods=['POST'])
+def login():
+    data = request.get_json()
+    username = data.get('username')
+    password = data.get('password')
+
+    if users.get(username) != password:
+        return jsonify({'msg': 'Credenciales inválidas'}), 401
+    
+    access_token = create_access_token(identity=username)
+    return jsonify(access_token=access_token), 200
 
 # Manejo de errores para el método POST
 @app.errorhandler(400)
@@ -54,6 +85,7 @@ tasks_schema = TaskSchema(many=True)
 
 # Endpoint para obtener todas las tareas
 @app.route('/tasks', methods=['GET'])
+@jwt_required()
 def get_tasks():
     tasks = Task.query.all()
     return tasks_schema.jsonify(tasks)
@@ -68,6 +100,11 @@ def create_task():
     db.session.add(new_task)
     db.session.commit()
     return task_schema.jsonify(new_task), 201
+
+@app.route('/tasks/check', methods=['GET'])
+def check_tasks():
+    tasks = Task.query.all()
+    return jsonify({'count': len(tasks)})
 
 # Eliminar una tarea por ID
 @app.route('/tasks/<int:task_id>', methods=['DELETE'])
