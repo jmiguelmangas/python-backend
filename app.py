@@ -3,7 +3,24 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_marshmallow import Marshmallow
 import os
 
+
+
 app = Flask(__name__)
+
+# Manejo de errores para el método POST
+@app.errorhandler(400)
+def bad_request(error):
+    return jsonify({'error': 'Bad Request', 'message': str(error)}), 400
+
+# Manejo de errores para el método PUT
+@app.errorhandler(404)
+def not_found(error):
+    return jsonify({'error': 'Not Found', 'message': str(error)}), 404
+
+# Manejo de errores generales
+@app.errorhandler(Exception)
+def handle_exception(e):
+    return jsonify({'error': 'Internal Server Error', 'message': str(e)}), 500
 
 # Configuración de SQLite
 basedir = os.path.abspath(os.path.dirname(__file__))
@@ -44,13 +61,12 @@ def get_tasks():
 # Endpoint para crear una tarea nueva
 @app.route('/tasks', methods=['POST'])
 def create_task():
-    title = request.json['title']
-    description = request.json.get('description', "")
-    new_task = Task(title, description, False)
-
+    data = request.get_json()
+    if not data or 'title' not in data:
+        return bad_request('El campo "title" es requerido.')  # Error si faltan datos
+    new_task = Task(title=data['title'], description=data.get('description'), done=data.get('done', False))
     db.session.add(new_task)
     db.session.commit()
-
     return task_schema.jsonify(new_task), 201
 
 # Eliminar una tarea por ID
@@ -64,13 +80,16 @@ def delete_task(task_id):
 # Actualizar una tarea por ID
 @app.route('/tasks/<int:task_id>', methods=['PUT'])
 def update_task(task_id):
-    task = Task.query.get_or_404(task_id)  # Obtener la tarea o devolver 404
-    data = request.get_json()  # Obtener los datos del cuerpo de la solicitud
-    task.title = data.get('title', task.title)  # Actualizar el título
-    task.description = data.get('description', task.description)  # Actualizar la descripción
-    task.done = data.get('done', task.done)  # Actualizar el estado de completado
-    db.session.commit()  # Guardar los cambios en la base de datos
-    return task_schema.jsonify(task)  # Devolver la tarea actualizada
+    task = Task.query.get_or_404(task_id)
+    data = request.get_json()
+    if 'title' in data:
+        task.title = data['title']
+    if 'description' in data:
+        task.description = data['description']
+    if 'done' in data:
+        task.done = data['done']
+    db.session.commit()
+    return task_schema.jsonify(task)
 
 
 if __name__ == "__main__":
