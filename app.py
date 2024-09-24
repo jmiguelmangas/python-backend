@@ -53,7 +53,25 @@ def create_task():
 
     return task_schema.jsonify(new_task), 201
 
-# Otros endpoints se pueden modificar de manera similar...
+# Eliminar una tarea por ID
+@app.route('/tasks/<int:task_id>', methods=['DELETE'])
+def delete_task(task_id):
+    task = Task.query.get_or_404(task_id)  # Obtener la tarea o devolver 404
+    db.session.delete(task)  # Eliminar la tarea de la base de datos
+    db.session.commit()  # Guardar los cambios en la base de datos
+    return '', 204  # Devolver un estado 204 No Content
+
+# Actualizar una tarea por ID
+@app.route('/tasks/<int:task_id>', methods=['PUT'])
+def update_task(task_id):
+    task = Task.query.get_or_404(task_id)  # Obtener la tarea o devolver 404
+    data = request.get_json()  # Obtener los datos del cuerpo de la solicitud
+    task.title = data.get('title', task.title)  # Actualizar el título
+    task.description = data.get('description', task.description)  # Actualizar la descripción
+    task.done = data.get('done', task.done)  # Actualizar el estado de completado
+    db.session.commit()  # Guardar los cambios en la base de datos
+    return task_schema.jsonify(task)  # Devolver la tarea actualizada
+
 
 if __name__ == "__main__":
     with app.app_context():  # Establecer el contexto de la aplicación
