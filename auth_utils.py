@@ -1,18 +1,17 @@
 from functools import wraps
 from flask import jsonify
-from flask_jwt_extended import get_jwt_identity
+from flask_jwt_extended import jwt_required, get_jwt
 from models import User  # Ahora importamos desde models.py
 
+
 def role_required(required_role):
-    def decorator(func):
-        @wraps(func)
-        def wrapper(*args, **kwargs):
-            user_id = get_jwt_identity()
-            user = User.query.get(user_id)
-            
-            if user and user.role == required_role:
-                return func(*args, **kwargs)
-            else:
-                return jsonify({"error": "Access forbidden: insufficient permissions"}), 403
-        return wrapper
-    return decorator
+    def wrapper(fn):
+        @wraps(fn)
+        @jwt_required()
+        def decorated(*args, **kwargs):
+            claims = get_jwt()
+            if claims['role'] != required_role:
+                return {'error': 'Access denied'}, 403
+            return fn(*args, **kwargs)
+        return decorated
+    return wrapper

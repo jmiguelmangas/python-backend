@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 from models import User  # Importamos desde models.py
 from extensions import db  # Importamos la instancia de db
 from auth_utils import role_required
+from werkzeug.security import generate_password_hash, check_password_hash
 
 load_dotenv()
 
@@ -14,6 +15,19 @@ app = Flask(__name__)
 SECRET_KEY = os.getenv('SECRET_KEY')
 app.config['JWT_SECRET_KEY'] = SECRET_KEY  # Cambia esto por una clave secreta más segura
 jwt = JWTManager(app)
+
+@jwt.additional_claims_loader
+def add_claims_to_access_token(identity):
+    user = User.query.filter_by(username=identity).first()  # Usar filter_by para buscar por username
+    if user:
+        return {'role': user.role}
+    return {}
+
+@jwt.user_lookup_loader
+def user_lookup_callback(_jwt_header, jwt_data):
+    identity = jwt_data["sub"]  # Ahora sólo deberías tener el username
+    return User.query.filter_by(username=identity).first()  # Busca al usuario por nombre de usuario
+
 
 # Configuración de SQLite
 basedir = os.path.abspath(os.path.dirname(__file__))
@@ -26,19 +40,27 @@ ma = Marshmallow(app)
 
 @jwt.additional_claims_loader
 def add_claims_to_access_token(identity):
-    user = User.query.get(identity)
-    return {'role': user.role}
+    user = User.query.filter_by(username=identity).first()  # Usa filter_by para buscar por username
+    if user:
+        return {'role': user.role}
+    return {}
+
 
 @app.route('/register', methods=['POST'])
 def register():
     username = request.json.get('username')
     password = request.json.get('password')
-    role = request.json.get('role', 'user')  # Por defecto, el rol es 'user'
-    
-    new_user = User(username=username, password=password, role=role)
+    role = request.json.get('role', 'user')  # Asignar 'user' como rol por defecto
+
+    # Verifica si el nombre de usuario ya existe
+    if User.query.filter_by(username=username).first():
+        return {'error': 'Username already exists'}, 400
+
+    new_user = User(username=username, password=generate_password_hash(password), role=role)
     db.session.add(new_user)
     db.session.commit()
-    return jsonify({"message": "User created successfully"}), 201
+    return {'message': 'User created successfully'}, 201
+
 
 
 @app.route('/login', methods=['POST'])
@@ -46,21 +68,34 @@ def login():
     username = request.json.get('username')
     password = request.json.get('password')
 
-    # Busca el usuario en la base de datos
     user = User.query.filter_by(username=username).first()
+    print(f"User found: {user}")  # Debugging
 
-    # Verifica si el usuario existe y si la contraseña es correcta
-    if user and user.password == password:  # Recuerda que deberías usar hashing para contraseñas en producción
-        access_token = create_access_token(identity=user.id)  # Usa el ID del usuario
-        return jsonify(access_token=access_token), 200
+    if user is None:  # Verifica si el usuario existe
+        return jsonify({"error": "Invalid username or password"}), 401
+
+    if check_password_hash(user.password, password):
+        access_token = create_access_token(identity=user.username)
+        return jsonify(token=access_token, role=user.role), 200
     else:
-        return jsonify({"error": "Invalid credentials"}), 401
+        return jsonify({"error": "Invalid username or password"}), 401
+
+
+
+
+
+
 
 @app.route('/protected', methods=['GET'])
 @jwt_required()  # Este decorador asegura que solo los usuarios autenticados puedan acceder
 def protected():
     current_user = get_jwt_identity()  # Obtiene la identidad del usuario desde el token
     return jsonify(logged_in_as=current_user), 200
+
+@app.route('/admin', methods=['GET'])
+@role_required('admin')
+def admin_route():
+    return {'message': 'Welcome, admin!'}, 200
 
 # Manejo de errores para el método POST
 @app.errorhandler(400)
@@ -125,14 +160,17 @@ def check_tasks():
 
 # Eliminar una tarea por ID
 @app.route('/tasks/<int:task_id>', methods=['DELETE'])
+@jwt_required()  # Solo los usuarios autenticados pueden acceder
 def delete_task(task_id):
     task = Task.query.get_or_404(task_id)  # Obtener la tarea o devolver 404
     db.session.delete(task)  # Eliminar la tarea de la base de datos
     db.session.commit()  # Guardar los cambios en la base de datos
     return '', 204  # Devolver un estado 204 No Content
 
+
 # Actualizar una tarea por ID
 @app.route('/tasks/<int:task_id>', methods=['PUT'])
+@jwt_required()  # Solo los usuarios autenticados pueden acceder
 def update_task(task_id):
     task = Task.query.get_or_404(task_id)
     data = request.get_json()
