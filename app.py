@@ -139,8 +139,19 @@ tasks_schema = TaskSchema(many=True)
 @app.route('/tasks', methods=['GET'])
 @jwt_required()
 def get_tasks():
-    tasks = Task.query.all()
-    return tasks_schema.jsonify(tasks)
+    page = request.args.get('page', 1, type=int)  # Obtener el número de página (por defecto 1)
+    per_page = request.args.get('per_page', 10, type=int)  # Número de tareas por página (por defecto 10)
+    
+    tasks = Task.query.paginate(page=page, per_page=per_page)  # Paginación
+    if not tasks.items:
+        return jsonify({'message': 'No tasks found for this page.'}), 404
+
+    return {
+        'tasks': tasks_schema.dump(tasks.items),
+        'total': tasks.total,
+        'page': tasks.page,
+        'pages': tasks.pages
+    }
 
 # Endpoint para crear una tarea nueva
 @app.route('/tasks', methods=['POST'])
