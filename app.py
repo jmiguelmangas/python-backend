@@ -4,6 +4,9 @@ from flask_marshmallow import Marshmallow
 import os
 from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
 from dotenv import load_dotenv
+from models import User  # Importamos desde models.py
+from extensions import db  # Importamos la instancia de db
+from auth_utils import role_required
 
 load_dotenv()
 
@@ -18,21 +21,13 @@ app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join(basedir, 'db
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # Inicializar la base de datos y Marshmallow
-db = SQLAlchemy(app)
+db.init_app(app)
 ma = Marshmallow(app)
 
 @jwt.additional_claims_loader
 def add_claims_to_access_token(identity):
     user = User.query.get(identity)
     return {'role': user.role}
-
-
-class User(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(80), unique=True, nullable=False)
-    password = db.Column(db.String(120), nullable=False)
-    role = db.Column(db.String(20), nullable=False, default='user')  # Agregamos el rol
-
 
 @app.route('/register', methods=['POST'])
 def register():
