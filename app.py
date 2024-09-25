@@ -4,10 +4,11 @@ from flask_marshmallow import Marshmallow
 import os
 from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
 from dotenv import load_dotenv
-from models import User  # Importamos desde models.py
-from extensions import db  # Importamos la instancia de db
+from models import User, Task   
+from extensions import db  
 from auth_utils import role_required
 from werkzeug.security import generate_password_hash, check_password_hash
+from schemas import TaskSchema
 
 load_dotenv()
 
@@ -112,19 +113,6 @@ def not_found(error):
 def handle_exception(e):
     return jsonify({'error': 'Internal Server Error', 'message': str(e)}), 500
 
-
-
-# Definir el modelo de Tarea
-class Task(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    title = db.Column(db.String(100), nullable=False)
-    description = db.Column(db.String(200))
-    done = db.Column(db.Boolean, default=False)
-
-    def __init__(self, title, description, done):
-        self.title = title
-        self.description = description
-        self.done = done
 
 # Esquema de la Tarea (para serialización)
 class TaskSchema(ma.Schema):
