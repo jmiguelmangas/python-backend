@@ -8,7 +8,8 @@ from models import User, Task
 from extensions import db  
 from auth_utils import role_required
 from werkzeug.security import generate_password_hash, check_password_hash
-from schemas import TaskSchema
+from schemas import TaskSchema, TagSchema
+from flask_migrate import Migrate
 
 load_dotenv()
 
@@ -16,6 +17,8 @@ app = Flask(__name__)
 SECRET_KEY = os.getenv('SECRET_KEY')
 app.config['JWT_SECRET_KEY'] = SECRET_KEY  # Cambia esto por una clave secreta más segura
 jwt = JWTManager(app)
+
+migrate = Migrate(app, db)
 
 @jwt.additional_claims_loader
 def add_claims_to_access_token(identity):
@@ -114,23 +117,35 @@ def handle_exception(e):
     return jsonify({'error': 'Internal Server Error', 'message': str(e)}), 500
 
 
-# Esquema de la Tarea (para serialización)
-class TaskSchema(ma.Schema):
-    class Meta:
-        fields = ('id', 'title', 'description', 'done')
-
 # Inicializar los esquemas
 task_schema = TaskSchema()
 tasks_schema = TaskSchema(many=True)
 
-# Endpoint para obtener todas las tareas
+# Endpoint para obtener todas las tareas con filtros y búsqueda
 @app.route('/tasks', methods=['GET'])
 @jwt_required()
 def get_tasks():
     page = request.args.get('page', 1, type=int)  # Obtener el número de página (por defecto 1)
     per_page = request.args.get('per_page', 10, type=int)  # Número de tareas por página (por defecto 10)
     
-    tasks = Task.query.paginate(page=page, per_page=per_page)  # Paginación
+    # Parámetros de búsqueda y filtro
+    search = request.args.get('search')  # Buscar en el título o descripción
+    done_filter = request.args.get('done', type=bool)  # Filtrar por tareas completadas o no
+    
+    # Consulta base de tareas
+    query = Task.query
+    
+    # Agregar condición de búsqueda si existe
+    if search:
+        query = query.filter((Task.title.ilike(f'%{search}%')) | (Task.description.ilike(f'%{search}%')))
+    
+    # Filtrar por estado 'done' si se proporciona
+    if done_filter is not None:
+        query = query.filter_by(done=done_filter)
+    
+    # Aplicar paginación
+    tasks = query.paginate(page=page, per_page=per_page)
+
     if not tasks.items:
         return jsonify({'message': 'No tasks found for this page.'}), 404
 
